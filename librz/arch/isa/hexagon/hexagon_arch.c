@@ -1268,6 +1268,10 @@ RZ_API void hexagon_reverse_opcode(HexReversedOpcode *rz_reverse, const ut64 add
 	}
 	ut64 initial_buffer_offset = rz_buf_tell(buffer);
 	ut64 current_addr = get_pre_decoding_start(buffer, addr);
+	// This happens if the instruction at addr lies at a IO map boundarie.
+	// It is therefor considered valid.
+	bool addr_at_io_map_border = current_addr == addr;
+
 	rz_buf_seek(buffer, current_addr, RZ_BUF_SET);
 
 	HexInsnContainer *hic = NULL;
@@ -1303,7 +1307,16 @@ RZ_API void hexagon_reverse_opcode(HexReversedOpcode *rz_reverse, const ut64 add
 		return;
 	}
 	HexPkt *p = hex_get_pkt(state, hic->addr);
-	rz_reverse->pkt_fully_decoded = p && p->is_valid;
+	if (p) {
+		// When the instruction is right at an IO boundary we have to mark it as valid.
+		// Otherwise the IL op will be EMPTY (invalid packet)
+		// and the asm text prefixes are '?'.
+		if (p->last_instr_present && addr_at_io_map_border) {
+			make_packet_valid(state, p);
+		}
+		rz_reverse->pkt_fully_decoded = p->is_valid;
+	}
+
 	copy_asm_ana_ops(state, rz_reverse, hic);
 	rz_buf_free(buffer);
 }
